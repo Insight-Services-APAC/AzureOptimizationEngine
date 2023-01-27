@@ -69,7 +69,7 @@ $tenantId = (Get-AzContext).Tenant.Id
 $datetime = (get-date).ToUniversalTime()
 $timestamp = $datetime.ToString("yyyy-MM-ddTHH:mm:00.000Z")
 
-$subscriptions = Get-AzSubscription -TenantId $tenantId | Where-Object { $_.State -eq "Enabled" -and $_.SubscriptionPolicies.QuotaId -notlike "AAD*" }
+$subscriptions = Get-AzSubscription -TenantId $tenantId | Where-Object { $_.State -eq "Enabled" }
 
 $roleAssignments = @()
 
@@ -79,7 +79,7 @@ foreach ($subscription in $subscriptions) {
 
     Select-AzSubscription -SubscriptionId $subscription.Id -TenantId $tenantId | Out-Null
 
-    $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators -ErrorAction Continue
+    $assignments = Get-AzRoleAssignment -IncludeClassicAdministrators
     Write-Output "Found $($assignments.Count) assignments for $($subscription.Name) subscription..."
 
     foreach ($assignment in $assignments) {
@@ -132,99 +132,95 @@ $csvProperties = @{"ContentType" = "text/csv"};
 
 Set-AzStorageBlobContent -File $csvExportPath -Container $storageAccountSinkContainer -Properties $csvProperties -Blob $csvBlobName -Context $sa.Context -Force
 
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $csvBlobName to Blob Storage..."
-
-Remove-Item -Path $csvExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $csvExportPath from local disk..."    
-
-Remove-Item -Path $jsonExportPath -Force
-    
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."    
-
 $roleAssignments = @()
 
 Write-Output "Getting Azure AD roles..."
 
-#workaround for https://github.com/microsoftgraph/msgraph-sdk-powershell/issues/888
-$localPath = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::UserProfile)
-if (-not(get-item "$localPath\.graph\" -ErrorAction SilentlyContinue))
-{
-    New-Item -Type Directory "$localPath\.graph"
-}
+Import-Module AzureADPreview
 
-Import-Module Microsoft.Graph.Identity.DirectoryManagement
-
-$graphEnvironment = "Global"
-$graphEndpointUri = "https://graph.microsoft.com"  
-if ($cloudEnvironment -eq "AzureUSGovernment")
+try
 {
-    $graphEnvironment = "USGov"
-    $graphEndpointUri = "https://graph.microsoft.us"
-}
-if ($cloudEnvironment -eq "AzureChinaCloud")
-{
-    $graphEnvironment = "China"
-    $graphEndpointUri = "https://microsoftgraph.chinacloudapi.cn"
-}
-if ($cloudEnvironment -eq "AzureGermanCloud")
-{
-    $graphEnvironment = "Germany"
-    $graphEndpointUri = "https://graph.microsoft.de"
-}
-
-$token = Get-AzAccessToken -ResourceUrl $graphEndpointUri
-Connect-MgGraph -AccessToken $token.Token -Environment $graphEnvironment    
-
-$domainName = (Get-MgDomain | Where-Object { $_.IsVerified -and $_.IsDefault } | Select-Object -First 1).Id
-
-$roles = Get-MgDirectoryRole -ExpandProperty Members -Property DisplayName,Members
-foreach ($role in $roles)
-{
-    $roleMembers = $role.Members | Where-Object { -not($_.DeletedDateTime) }
-    foreach ($roleMember in $roleMembers)
+    if (-not([string]::IsNullOrEmpty($externalCredentialName)))
     {
-        $assignmentEntry = New-Object PSObject -Property @{
-            Timestamp         = $timestamp
-            TenantGuid        = $tenantId
-            Cloud             = $cloudEnvironment
-            Model             = "AzureAD"
-            PrincipalId       = $roleMember.Id
-            Scope             = $domainName
-            RoleDefinition    = $role.DisplayName
+        $apiEndpointUri = "https://graph.windows.net/"  
+        if ($cloudEnvironment -eq "AzureChinaCloud")
+        {
+            $apiEndpointUri = "https://graph.chinacloudapi.cn/"
         }
-        $roleAssignments += $assignmentEntry                            
+        if ($cloudEnvironment -eq "AzureGermanCloud")
+        {
+            $apiEndpointUri = "https://graph.cloudapi.de/"
+        }
+        $applicationId = $externalCredential.GetNetworkCredential().UserName
+        $secret = $externalCredential.GetNetworkCredential().Password
+        $encodedSecret = [System.Web.HttpUtility]::UrlEncode($secret)
+        $RequestAccessTokenUri = "https://login.microsoftonline.com/$externalTenantId/oauth2/token"  
+        if ($cloudEnvironment -eq "AzureChinaCloud")
+        {
+            $RequestAccessTokenUri = "https://login.partner.microsoftonline.cn/$externalTenantId/oauth2/token"
+        }
+        if ($cloudEnvironment -eq "AzureUSGovernment")
+        {
+            $RequestAccessTokenUri = "https://login.microsoftonline.us/$externalTenantId/oauth2/token"
+        }
+        if ($cloudEnvironment -eq "AzureGermanCloud")
+        {
+            $RequestAccessTokenUri = "https://login.microsoftonline.de/$externalTenantId/oauth2/token"
+        }
+        $body = "grant_type=client_credentials&client_id=$applicationId&client_secret=$encodedSecret&resource=$apiEndpointUri"  
+        $contentType = 'application/x-www-form-urlencoded'  
+        $Token = Invoke-RestMethod -Method Post -Uri $RequestAccessTokenUri -Body $body -ContentType $contentType      
+        $ctx = Get-AzContext
+        Connect-AzureAD -AzureEnvironmentName $cloudEnvironment -AadAccessToken $token.access_token -AccountId $ctx.Account.Id -TenantId $externalTenantId
     }
+    else
+    {
+        Connect-AzureAD -AzureEnvironmentName $cloudEnvironment -TenantId $tenantId -ApplicationId $ArmConn.ApplicationID -CertificateThumbprint $ArmConn.CertificateThumbprint
+    }
+    
+    $tenantDetails = Get-AzureADTenantDetail                
+}
+catch
+{
+    Write-Output "Failed Azure AD authentication."
 }
 
-$fileDate = $datetime.ToString("yyyyMMdd")
-$jsonExportPath = "$fileDate-$tenantId-aadrbacassignments.json"
-$csvExportPath = "$fileDate-$tenantId-aadrbacassignments.csv"
-
-$roleAssignments | ConvertTo-Json -Depth 3 | Out-File $jsonExportPath
-Write-Output "Exported to JSON: $($roleAssignments.Count) lines"
-$rbacObjectsJson = Get-Content -Path $jsonExportPath | ConvertFrom-Json
-Write-Output "JSON Import: $($rbacObjectsJson.Count) lines"
-$rbacObjectsJson | Export-Csv -NoTypeInformation -Path $csvExportPath
-Write-Output "Export to $csvExportPath"
-
-$csvBlobName = $csvExportPath
-$csvProperties = @{"ContentType" = "text/csv"};
-
-Set-AzStorageBlobContent -File $csvExportPath -Container $storageAccountSinkContainer -Properties $csvProperties -Blob $csvBlobName -Context $sa.Context -Force    
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $csvBlobName to Blob Storage..."
-
-Remove-Item -Path $csvExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $csvExportPath from local disk..."    
-
-Remove-Item -Path $jsonExportPath -Force
+if ($tenantDetails)
+{
+    $roles = Get-AzureADDirectoryRole    
+    foreach ($role in $roles)
+    {
+        $roleMembers = (Get-AzureADDirectoryRoleMember -ObjectId $role.ObjectId).ObjectId
+        foreach ($roleMember in $roleMembers)
+        {
+            $assignmentEntry = New-Object PSObject -Property @{
+                Timestamp         = $timestamp
+                TenantGuid        = $tenantId
+                Cloud             = $cloudEnvironment
+                Model             = "AzureAD"
+                PrincipalId       = $roleMember
+                Scope             = $tenantDetails.VerifiedDomains[0].Name
+                RoleDefinition    = $role.DisplayName
+            }
+            $roleAssignments += $assignmentEntry                            
+        }
+    }
     
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."    
+    $fileDate = $datetime.ToString("yyyyMMdd")
+    $jsonExportPath = "$fileDate-$tenantId-aadrbacassignments.json"
+    $csvExportPath = "$fileDate-$tenantId-aadrbacassignments.csv"
+    
+    $roleAssignments | ConvertTo-Json -Depth 3 | Out-File $jsonExportPath
+    Write-Output "Exported to JSON: $($roleAssignments.Count) lines"
+    $rbacObjectsJson = Get-Content -Path $jsonExportPath | ConvertFrom-Json
+    Write-Output "JSON Import: $($rbacObjectsJson.Count) lines"
+    $rbacObjectsJson | Export-Csv -NoTypeInformation -Path $csvExportPath
+    Write-Output "Export to $csvExportPath"
+    
+    $csvBlobName = $csvExportPath
+    $csvProperties = @{"ContentType" = "text/csv"};
+    
+    Set-AzStorageBlobContent -File $csvExportPath -Container $storageAccountSinkContainer -Properties $csvProperties -Blob $csvBlobName -Context $sa.Context -Force    
+}
+
+Write-Output "DONE!"

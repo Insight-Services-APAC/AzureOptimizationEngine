@@ -30,7 +30,7 @@ $sharedKey = Get-AutomationVariable -Name  "AzureOptimization_LogAnalyticsWorksp
 $LogAnalyticsChunkSize = [int] (Get-AutomationVariable -Name  "AzureOptimization_LogAnalyticsChunkSize" -ErrorAction SilentlyContinue)
 if (-not($LogAnalyticsChunkSize -gt 0))
 {
-    $LogAnalyticsChunkSize = 6000
+    $LogAnalyticsChunkSize = 10000
 }
 $lognamePrefix = Get-AutomationVariable -Name  "AzureOptimization_LogAnalyticsLogPrefix" -ErrorAction SilentlyContinue
 if ([string]::IsNullOrEmpty($lognamePrefix))
@@ -199,31 +199,23 @@ if ($controlRows.Count -eq 0 -or -not($controlRows[0].LastProcessedDateTime))
 
 $controlRow = $controlRows[0]
 $lastProcessedLine = $controlRow.LastProcessedLine
-$lastProcessedDateTime = $controlRow.LastProcessedDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-$LogAnalyticsSuffix = $controlRow.LogAnalyticsSuffix
-$logname = $lognamePrefix + $LogAnalyticsSuffix
-
-Write-Output "Processing blobs modified after $lastProcessedDateTime (line $lastProcessedLine) and ingesting them into the $($logname)_CL table..."
+$lastProcessedDateTime = $controlRow.LastProcessedDateTime.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+$logname = $lognamePrefix + $controlRow.LogAnalyticsSuffix
 
 $newProcessedTime = $null
 
 $unprocessedBlobs = @()
 
 foreach ($blob in $allblobs) {
-	$blobLastModified = $blob.LastModified.UtcDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-    if ($lastProcessedDateTime -lt $blobLastModified -or `
-        ($lastProcessedDateTime -eq $blobLastModified -and $lastProcessedLine -gt 0)) {
-		Write-Output "$($blob.Name) found (modified on $blobLastModified)"
+    if ($lastProcessedDateTime -lt $blob.LastModified.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")) {
         $unprocessedBlobs += $blob
     }
 }
 
-$unprocessedBlobs = $unprocessedBlobs | Sort-Object -Property LastModified
-
 Write-Output "Found $($unprocessedBlobs.Count) new blobs to process..."
 
 foreach ($blob in $unprocessedBlobs) {
-    $newProcessedTime = $blob.LastModified.UtcDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+    $newProcessedTime = $blob.LastModified.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
     Write-Output "About to process $($blob.Name)..."
     Get-AzStorageBlobContent -CloudBlob $blob.ICloudBlob -Context $sa.Context -Force
     $csvObject = Import-Csv $blob.Name
@@ -263,7 +255,7 @@ foreach ($blob in $unprocessedBlobs) {
             $jsonObject = ConvertTo-Json -InputObject $csvObjectSplitted[$i]                
             $res = Post-OMSData -workspaceId $workspaceId -sharedKey $sharedKey -body ([System.Text.Encoding]::UTF8.GetBytes($jsonObject)) -logType $logname -TimeStampField "Timestamp" -AzureEnvironment $cloudEnvironment
             If ($res -ge 200 -and $res -lt 300) {
-                Write-Output "Succesfully uploaded $currentObjectLines $LogAnalyticsSuffix rows to Log Analytics"    
+                Write-Output "Succesfully uploaded $currentObjectLines $($controlTable.LogAnalyticsSuffix) rows to Log Analytics"    
                 $linesProcessed += $currentObjectLines
                 if ($i -eq ($csvObjectSplitted.Count - 1)) {
                     $lastProcessedLine = -1    
@@ -292,7 +284,7 @@ foreach ($blob in $unprocessedBlobs) {
             }
             Else {
                 $linesProcessed += $currentObjectLines
-                Write-Warning "Failed to upload $currentObjectLines $LogAnalyticsSuffix rows. Error code: $res"
+                Write-Warning "Failed to upload $currentObjectLines $($controlTable.LogAnalyticsSuffix) rows. Error code: $res"
                 throw
             }
         }
@@ -300,8 +292,4 @@ foreach ($blob in $unprocessedBlobs) {
             $linesProcessed += $currentObjectLines  
         }            
     }
-
-    Remove-Item -Path $blob.Name -Force
 }
-
-Write-Output "DONE"

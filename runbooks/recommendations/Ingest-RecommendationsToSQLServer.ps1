@@ -123,32 +123,25 @@ if ($controlRows.Count -eq 0)
 
 $controlRow = $controlRows[0]    
 $lastProcessedLine = $controlRow.LastProcessedLine
-$lastProcessedDateTime = $controlRow.LastProcessedDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+$lastProcessedDateTime = $controlRow.LastProcessedDateTime.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
 
 $Conn.Close()    
 $Conn.Dispose()            
-
-Write-Output "Processing blobs modified after $lastProcessedDateTime (line $lastProcessedLine) and ingesting them into the Recommendations SQL table..."
 
 $newProcessedTime = $null
 
 $unprocessedBlobs = @()
 
 foreach ($blob in $allblobs) {
-    $blobLastModified = $blob.LastModified.UtcDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-    if ($lastProcessedDateTime -lt $blobLastModified -or `
-        ($lastProcessedDateTime -eq $blobLastModified -and $lastProcessedLine -gt 0)) {
-        Write-Output "$($blob.Name) found (modified on $blobLastModified)"
+    if ($lastProcessedDateTime -lt $blob.LastModified.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")) {
         $unprocessedBlobs += $blob
     }
 }
 
-$unprocessedBlobs = $unprocessedBlobs | Sort-Object -Property LastModified
-
 Write-Output "Found $($unprocessedBlobs.Count) new blobs to process..."
 
 foreach ($blob in $unprocessedBlobs) {
-    $newProcessedTime = $blob.LastModified.UtcDateTime.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+    $newProcessedTime = $blob.LastModified.ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
     Write-Output "About to process $($blob.Name)..."
     Get-AzStorageBlobContent -CloudBlob $blob.ICloudBlob -Context $sa.Context -Force
     $jsonObject = Get-Content -Path $blob.Name | ConvertFrom-Json
@@ -280,8 +273,4 @@ foreach ($blob in $unprocessedBlobs) {
             }        
         }
     }
-
-    Remove-Item -Path $blob.Name -Force
 }
-
-Write-Output "DONE"
