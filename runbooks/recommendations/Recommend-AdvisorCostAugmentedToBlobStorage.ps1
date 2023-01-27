@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 function Find-SkuHourlyPrice {
     param (
-        [object[]] $SKUPriceSheet,
+        [object] $SKUPriceSheet,
         [string] $SKUName
     )
 
@@ -14,13 +14,14 @@ function Find-SkuHourlyPrice {
 
         if ($skuNameParts.Count -eq 3) # e.g., Standard_D1_v2
         {
-            $skuNameFilter = "*" + $skuNameParts[1] + " *"
+            $skuNameFilter = "*" + $skuNameParts[1] + "*"
             $skuVersionFilter = "*" + $skuNameParts[2]
-            $skuPrices = $SKUPriceSheet | Where-Object { $_.MeterDetails.MeterName -like $skuNameFilter `
+            $skuPrices = $SKUPriceSheet.PriceSheets | Where-Object { $_.MeterDetails.MeterCategory -eq 'Virtual Machines' `
+             -and $_.MeterDetails.MeterLocation -eq 'EU West' -and $_.MeterDetails.MeterName -like $skuNameFilter `
              -and $_.MeterDetails.MeterName -notlike '*Low Priority' -and $_.MeterDetails.MeterName -notlike '*Expired' `
-             -and $_.MeterDetails.MeterName -like $skuVersionFilter -and $_.MeterDetails.MeterSubCategory -notlike '*Windows' -and $_.UnitPrice -ne 0 }
+             -and $_.MeterDetails.MeterName -like $skuVersionFilter -and $_.MeterDetails.MeterSubCategory -notlike '*Windows'}
             
-            if (($skuPrices -or $skuPrices.Count -ge 1) -and $skuPrices.Count -le 2)
+            if ($skuPrices.Count -eq 2)
             {
                 $skuPriceObject = $skuPrices[0]
             }
@@ -29,7 +30,7 @@ function Find-SkuHourlyPrice {
                 $skuFilter = "*" + $skuNameParts[1] + " " + $skuNameParts[2] + "*"
                 $skuPrices = $skuPrices | Where-Object { $_.MeterDetails.MeterName -like $skuFilter }
     
-                if (($skuPrices -or $skuPrices.Count -ge 1) -and $skuPrices.Count -le 2)
+                if ($skuPrices.Count -eq 2)
                 {
                     $skuPriceObject = $skuPrices[0]
                 }
@@ -40,11 +41,12 @@ function Find-SkuHourlyPrice {
         {
             $skuNameFilter = "*" + $skuNameParts[1] + "*"
     
-            $skuPrices = $SKUPriceSheet | Where-Object { $_.MeterDetails.MeterName -like $skuNameFilter `
+            $skuPrices = $SKUPriceSheet.PriceSheets | Where-Object { $_.MeterDetails.MeterCategory -eq 'Virtual Machines' `
+             -and $_.MeterDetails.MeterLocation -eq 'EU West' -and $_.MeterDetails.MeterName -like $skuNameFilter `
              -and $_.MeterDetails.MeterName -notlike '*Low Priority' -and $_.MeterDetails.MeterName -notlike '*Expired' `
-             -and $_.MeterDetails.MeterName -notlike '* v*' -and $_.MeterDetails.MeterSubCategory -notlike '*Windows' -and $_.UnitPrice -ne 0 }
+             -and $_.MeterDetails.MeterName -notlike '* v*' -and $_.MeterDetails.MeterSubCategory -notlike '*Windows'}
             
-            if (($skuPrices -or $skuPrices.Count -ge 1) -and $skuPrices.Count -le 2)
+            if ($skuPrices.Count -eq 2)
             {
                 $skuPriceObject = $skuPrices[0]
             }
@@ -54,7 +56,7 @@ function Find-SkuHourlyPrice {
                 $skuFilterRight = "*/" + $skuNameParts[1] + "*"
                 $skuPrices = $skuPrices | Where-Object { $_.MeterDetails.MeterName -like $skuFilterLeft -or $_.MeterDetails.MeterName -like $skuFilterRight }
                 
-                if (($skuPrices -or $skuPrices.Count -ge 1) -and $skuPrices.Count -le 2)
+                if ($skuPrices.Count -eq 2)
                 {
                     $skuPriceObject = $skuPrices[0]
                 }
@@ -309,59 +311,13 @@ if ($workspaceSubscriptionId -ne $storageAccountSinkSubscriptionId)
 
 Write-Output "Getting Virtual Machine SKUs for the $referenceRegion region..."
 # Get all the VM SKUs information for the reference Azure region
-$skus = Get-AzComputeResourceSku -Location $referenceRegion | Where-Object { $_.ResourceType -eq "virtualMachines" }
+$skus = Get-AzComputeResourceSku | Where-Object { $_.ResourceType -eq "virtualMachines" -and $_.LocationInfo.Location -eq $referenceRegion }
 
 Write-Output "Getting the current Pricesheet..."
 
-if ($cloudEnvironment -eq "AzureCloud")
-{
-    $pricesheetRegion = "EU West"
-}
-
 try 
 {
-    $pricesheet = $null
-    $pricesheetEntries = @()
-    $subscription = $workspaceSubscriptionId
-    $PriceSheetApiPath = "/subscriptions/$subscription/providers/Microsoft.Consumption/pricesheets/default?api-version=2021-10-01&%24expand=properties%2FmeterDetails"
-
-    do
-    {
-        if (-not([string]::IsNullOrEmpty($pricesheet.properties.nextLink)))
-        {
-            $PriceSheetApiPath = $pricesheet.properties.nextLink.Substring($pricesheet.properties.nextLink.IndexOf("/subscriptions/"))
-        }
-        $tries = 0
-        $requestSuccess = $false
-        do 
-        {        
-            try {
-                $tries++
-                $pricesheet = (Invoke-AzRestMethod -Path $PriceSheetApiPath -Method GET).Content | ConvertFrom-Json
-
-                if ($pricesheet.error)
-                {
-                    throw "Cost Management not available ($($pricesheet.error.message))"
-                }    
-
-                $requestSuccess = $true
-            }
-            catch {
-                $ErrorMessage = $_.Exception.Message
-                Write-Warning "Error getting consumption data: $ErrorMessage. $tries of 3 tries. Waiting 30 seconds..."
-                Start-Sleep -s 30   
-            }
-        } while ( -not($requestSuccess) -and $tries -lt 3 )
-
-        if ($pricesheet.error)
-        {
-            throw "Cost Management not available"
-        }
-
-        $pricesheetEntries += $pricesheet.properties.pricesheets | Where-Object { $_.meterDetails.meterLocation -eq $pricesheetRegion -and $_.meterDetails.meterCategory -eq "Virtual Machines" }
-
-    }
-    while ($requestSuccess -and -not([string]::IsNullOrEmpty($pricesheet.properties.nextLink)))
+    $pricesheet = Get-AzConsumptionPriceSheet -ExpandMeterDetail
 }
 catch
 {
@@ -382,43 +338,38 @@ if ($additionalPerfWorkspaces)
         $linuxMemoryPerfAdditionalWorkspaces += @"
         | union ( workspace('$additionalWorkspace').Perf 
         | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
-        | where CounterName == '% Used Memory'
-        | extend WorkspaceId = TenantId 
-        | summarize hint.strategy=shuffle PMemoryPercentage = percentile(CounterValue, memoryPercentileValue) by _ResourceId, WorkspaceId)
+        | where CounterName == '% Used Memory' 
+        | summarize hint.strategy=shuffle PMemoryPercentage = percentile(CounterValue, memoryPercentileValue) by _ResourceId)
 "@
         $windowsMemoryPerfAdditionalWorkspaces += @"
         | union ( workspace('$additionalWorkspace').Perf 
         | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
         | where CounterName == 'Available MBytes' 
-        | extend WorkspaceId = TenantId 
-        | project TimeGenerated, MemoryAvailableMBs = CounterValue, _ResourceId, WorkspaceId)
+        | project TimeGenerated, MemoryAvailableMBs = CounterValue, _ResourceId)
 "@
         $processorPerfAdditionalWorkspaces += @"
         | union ( workspace('$additionalWorkspace').Perf 
         | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
         | where ObjectName == 'Processor' and CounterName == '% Processor Time' and InstanceName == '_Total' 
-        | extend WorkspaceId = TenantId 
-        | summarize hint.strategy=shuffle PCPUPercentage = percentile(CounterValue, cpuPercentileValue) by _ResourceId, WorkspaceId)
+        | summarize hint.strategy=shuffle PCPUPercentage = percentile(CounterValue, cpuPercentileValue) by _ResourceId)
 "@
         $windowsNetworkPerfAdditionalWorkspaces += @"
         | union ( workspace('$additionalWorkspace').Perf 
         | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
         | where CounterName == 'Bytes Total/sec' 
-        | extend WorkspaceId = TenantId 
-        | summarize hint.strategy=shuffle PCounter = percentile(CounterValue, networkPercentileValue) by InstanceName, _ResourceId, WorkspaceId
-        | summarize PNetwork = sum(PCounter) by _ResourceId, WorkspaceId)
+        | summarize hint.strategy=shuffle PCounter = percentile(CounterValue, networkPercentileValue) by InstanceName, _ResourceId
+        | summarize PNetwork = sum(PCounter) by _ResourceId)
 "@
         $diskPerfAdditionalWorkspaces += @"
         | union ( workspace('$additionalWorkspace').Perf
         | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
         | where CounterName in ('Disk Reads/sec', 'Disk Writes/sec', 'Disk Read Bytes/sec', 'Disk Write Bytes/sec') and InstanceName !in ('_Total', 'D:', '/mnt/resource', '/mnt')
-        | extend WorkspaceId = TenantId 
-        | summarize hint.strategy=shuffle PCounter = percentile(CounterValue, diskPercentileValue) by bin(TimeGenerated, perfTimeGrain), CounterName, InstanceName, _ResourceId, WorkspaceId
-        | summarize SumPCounter = sum(PCounter) by CounterName, TimeGenerated, _ResourceId, WorkspaceId
+        | summarize hint.strategy=shuffle PCounter = percentile(CounterValue, diskPercentileValue) by bin(TimeGenerated, perfTimeGrain), CounterName, InstanceName, _ResourceId
+        | summarize SumPCounter = sum(PCounter) by CounterName, TimeGenerated, _ResourceId
         | summarize MaxPReadIOPS = maxif(SumPCounter, CounterName == 'Disk Reads/sec'), 
                     MaxPWriteIOPS = maxif(SumPCounter, CounterName == 'Disk Writes/sec'), 
                     MaxPReadMiBps = (maxif(SumPCounter, CounterName == 'Disk Read Bytes/sec') / 1024 / 1024), 
-                    MaxPWriteMiBps = (maxif(SumPCounter, CounterName == 'Disk Write Bytes/sec') / 1024 / 1024) by _ResourceId, WorkspaceId)
+                    MaxPWriteMiBps = (maxif(SumPCounter, CounterName == 'Disk Write Bytes/sec') / 1024 / 1024) by _ResourceId)
 "@
     }
 }
@@ -435,7 +386,7 @@ let networkPercentileValue = $networkPercentile;
 let diskPercentileValue = $diskPercentile;
 let rightSizeRecommendationId = '$rightSizeRecommendationId';
 let billingInterval = 30d;
-let etime = todatetime(toscalar($consumptionTableName | where todatetime(Date_s) < now() and todatetime(Date_s) > ago(30d) | summarize max(todatetime(Date_s)))); 
+let etime = todatetime(toscalar($consumptionTableName | summarize max(UsageDate_t))); 
 let stime = etime-billingInterval; 
 let RightSizeInstanceIds = materialize($advisorTableName 
 | where todatetime(TimeGenerated) > ago(advisorInterval) and Category == 'Cost' and RecommendationTypeId_g == rightSizeRecommendationId
@@ -443,13 +394,11 @@ let RightSizeInstanceIds = materialize($advisorTableName
 let LinuxMemoryPerf = Perf 
 | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
 | where CounterName == '% Used Memory' 
-| extend WorkspaceId = TenantId 
-| summarize hint.strategy=shuffle PMemoryPercentage = percentile(CounterValue, memoryPercentileValue) by _ResourceId, WorkspaceId$linuxMemoryPerfAdditionalWorkspaces;
+| summarize hint.strategy=shuffle PMemoryPercentage = percentile(CounterValue, memoryPercentileValue) by _ResourceId$linuxMemoryPerfAdditionalWorkspaces;
 let WindowsMemoryPerf = Perf 
 | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
 | where CounterName == 'Available MBytes' 
-| extend WorkspaceId = TenantId 
-| project TimeGenerated, MemoryAvailableMBs = CounterValue, _ResourceId, WorkspaceId$windowsMemoryPerfAdditionalWorkspaces;
+| project TimeGenerated, MemoryAvailableMBs = CounterValue, _ResourceId$windowsMemoryPerfAdditionalWorkspaces;
 let MemoryPerf = $vmsTableName 
 | where TimeGenerated > ago(1d)
 | distinct InstanceId_s, MemoryMB_s
@@ -457,41 +406,36 @@ let MemoryPerf = $vmsTableName
 	WindowsMemoryPerf
 ) on `$left.InstanceId_s == `$right._ResourceId
 | extend MemoryPercentage = todouble(toint(MemoryMB_s) - toint(MemoryAvailableMBs)) / todouble(MemoryMB_s) * 100 
-| summarize hint.strategy=shuffle PMemoryPercentage = percentile(MemoryPercentage, memoryPercentileValue) by _ResourceId, WorkspaceId
+| summarize hint.strategy=shuffle PMemoryPercentage = percentile(MemoryPercentage, memoryPercentileValue) by _ResourceId
 | union LinuxMemoryPerf;
 let ProcessorPerf = Perf 
 | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
 | where ObjectName == 'Processor' and CounterName == '% Processor Time' and InstanceName == '_Total' 
-| extend WorkspaceId = TenantId 
-| summarize hint.strategy=shuffle PCPUPercentage = percentile(CounterValue, cpuPercentileValue) by _ResourceId, WorkspaceId$processorPerfAdditionalWorkspaces;
+| summarize hint.strategy=shuffle PCPUPercentage = percentile(CounterValue, cpuPercentileValue) by _ResourceId$processorPerfAdditionalWorkspaces;
 let WindowsNetworkPerf = Perf 
 | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
 | where CounterName == 'Bytes Total/sec' 
-| extend WorkspaceId = TenantId 
-| summarize hint.strategy=shuffle PCounter = percentile(CounterValue, networkPercentileValue) by InstanceName, _ResourceId, WorkspaceId
-| summarize PNetwork = sum(PCounter) by _ResourceId, WorkspaceId$windowsNetworkPerfAdditionalWorkspaces;
+| summarize hint.strategy=shuffle PCounter = percentile(CounterValue, networkPercentileValue) by InstanceName, _ResourceId
+| summarize PNetwork = sum(PCounter) by _ResourceId$windowsNetworkPerfAdditionalWorkspaces;
 let DiskPerf = Perf
 | where TimeGenerated > ago(perfInterval) and _ResourceId in (RightSizeInstanceIds) 
 | where CounterName in ('Disk Reads/sec', 'Disk Writes/sec', 'Disk Read Bytes/sec', 'Disk Write Bytes/sec') and InstanceName !in ('_Total', 'D:', '/mnt/resource', '/mnt')
-| extend WorkspaceId = TenantId 
-| summarize hint.strategy=shuffle PCounter = percentile(CounterValue, diskPercentileValue) by bin(TimeGenerated, perfTimeGrain), CounterName, InstanceName, _ResourceId, WorkspaceId
-| summarize SumPCounter = sum(PCounter) by CounterName, TimeGenerated, _ResourceId, WorkspaceId
+| summarize hint.strategy=shuffle PCounter = percentile(CounterValue, diskPercentileValue) by bin(TimeGenerated, perfTimeGrain), CounterName, InstanceName, _ResourceId
+| summarize SumPCounter = sum(PCounter) by CounterName, TimeGenerated, _ResourceId
 | summarize MaxPReadIOPS = maxif(SumPCounter, CounterName == 'Disk Reads/sec'), 
             MaxPWriteIOPS = maxif(SumPCounter, CounterName == 'Disk Writes/sec'), 
             MaxPReadMiBps = (maxif(SumPCounter, CounterName == 'Disk Read Bytes/sec') / 1024 / 1024), 
-            MaxPWriteMiBps = (maxif(SumPCounter, CounterName == 'Disk Write Bytes/sec') / 1024 / 1024) by _ResourceId, WorkspaceId$diskPerfAdditionalWorkspaces;
+            MaxPWriteMiBps = (maxif(SumPCounter, CounterName == 'Disk Write Bytes/sec') / 1024 / 1024) by _ResourceId$diskPerfAdditionalWorkspaces;
 $advisorTableName 
 | where todatetime(TimeGenerated) > ago(advisorInterval) and Category == 'Cost'
-| extend AdvisorRecIdIndex = indexof(InstanceId_s, '/providers/microsoft.advisor/recommendations')
-| extend InstanceName_s = iif(isnotempty(InstanceName_s),InstanceName_s,iif(AdvisorRecIdIndex > 0, split(substring(InstanceId_s, 0, AdvisorRecIdIndex),'/')[-1], split(InstanceId_s,'/')[-1]))
+| extend InstanceName_s = iif(isnotempty(InstanceName_s),InstanceName_s,InstanceName_g)
 | distinct InstanceId_s, InstanceName_s, Description_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroup, Cloud_s, AdditionalInfo_s, RecommendationText_s, ImpactedArea_s, Impact_s, RecommendationTypeId_g
 | join kind=leftouter (
     $consumptionTableName
-    | where todatetime(Date_s) between (stime..etime)
-    | extend VMConsumedQuantity = iif(ResourceId contains 'virtualmachines' and MeterCategory_s == 'Virtual Machines', todouble(Quantity_s), 0.0)
-    | extend VMPrice = iif(ResourceId contains 'virtualmachines' and MeterCategory_s == 'Virtual Machines', todouble(UnitPrice_s), 0.0)
-    | extend FinalCost = iif(ResourceId contains 'virtualmachines', VMPrice * VMConsumedQuantity, todouble(CostInBillingCurrency_s))
-    | extend InstanceId_s = tolower(ResourceId)
+    | where UsageDate_t between (stime..etime)
+    | extend VMConsumedQuantity = iif(InstanceId_s contains 'virtualmachines' and MeterCategory_s == 'Virtual Machines', todouble(Quantity_s), 0.0)
+    | extend VMPrice = iif(InstanceId_s contains 'virtualmachines' and MeterCategory_s == 'Virtual Machines', todouble(UnitPrice_s), 0.0)
+    | extend FinalCost = iif(InstanceId_s contains 'virtualmachines', VMPrice * VMConsumedQuantity, todouble(Cost_s))
     | summarize Last30DaysCost = sum(FinalCost), Last30DaysQuantity = sum(VMConsumedQuantity) by InstanceId_s
 ) on InstanceId_s
 | join kind=leftouter (
@@ -506,7 +450,7 @@ $advisorTableName
 | join kind=leftouter hint.strategy=broadcast ( DiskPerf ) on `$left.InstanceId_s == `$right._ResourceId
 | extend MaxPIOPS = MaxPReadIOPS + MaxPWriteIOPS, MaxPMiBps = MaxPReadMiBps + MaxPWriteMiBps
 | extend PNetworkMbps = PNetwork * 8 / 1000 / 1000
-| distinct Last30DaysCost, Last30DaysQuantity, InstanceId_s, InstanceName_s, Description_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroup, Cloud_s, AdditionalInfo_s, RecommendationText_s, ImpactedArea_s, Impact_s, RecommendationTypeId_g, NicCount_s, DataDiskCount_s, PMemoryPercentage, PCPUPercentage, PNetworkMbps, MaxPIOPS, MaxPMiBps, Tags_s, WorkspaceId
+| distinct Last30DaysCost, Last30DaysQuantity, InstanceId_s, InstanceName_s, Description_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroup, Cloud_s, AdditionalInfo_s, RecommendationText_s, ImpactedArea_s, Impact_s, RecommendationTypeId_g, NicCount_s, DataDiskCount_s, PMemoryPercentage, PCPUPercentage, PNetworkMbps, MaxPIOPS, MaxPMiBps, Tags_s
 | join kind=leftouter ( 
     $subscriptionsTableName
     | where TimeGenerated > ago(1d)
@@ -530,8 +474,6 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
-    Write-Warning -Message $error[0]
-    throw "Execution aborted"
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -601,7 +543,7 @@ foreach ($result in $results) {
     $fitScore = 5
     $hasCpuRamPerfMetrics = $false
 
-    if ($additionalInfoDictionary.targetSku -and $result.RecommendationTypeId_g -eq $rightSizeRecommendationId) {
+    if ($additionalInfoDictionary.targetSku) {
         $additionalInfoDictionary["SupportsDataDisksCount"] = "true"
         $additionalInfoDictionary["DataDiskCount"] = "$($result.DataDiskCount_s)"
         $additionalInfoDictionary["SupportsNICCount"] = "true"
@@ -620,9 +562,9 @@ foreach ($result in $results) {
         $targetSku = $null
         if ($additionalInfoDictionary.targetSku -ne "Shutdown") {
             $currentSku = $skus | Where-Object { $_.Name -eq $additionalInfoDictionary.currentSku }
-            $currentSkuvCPUs = [int]($currentSku.Capabilities | Where-Object { $_.Name -eq 'vCPUsAvailable' }).Value
+            $currentSkuvCPUs = [double]($currentSku.Capabilities | Where-Object { $_.Name -eq 'vCPUsAvailable' }).Value
             $targetSku = $skus | Where-Object { $_.Name -eq $additionalInfoDictionary.targetSku }
-            $targetSkuvCPUs = [int]($targetSku.Capabilities | Where-Object { $_.Name -eq 'vCPUsAvailable' }).Value
+            $targetSkuvCPUs = [double]($targetSku.Capabilities | Where-Object { $_.Name -eq 'vCPUsAvailable' }).Value
             $targetMaxDataDiskCount = [int]($targetSku.Capabilities | Where-Object { $_.Name -eq 'MaxDataDiskCount' }).Value
             if ($targetMaxDataDiskCount -gt 0) {
                 if (-not([string]::isNullOrEmpty($result.DataDiskCount_s))) {
@@ -660,7 +602,7 @@ foreach ($result in $results) {
             $targetUncachedDiskIOPS = [int]($targetSku.Capabilities | Where-Object { $_.Name -eq 'UncachedDiskIOPS' }).Value
             if ($targetUncachedDiskIOPS -gt 0) {
                 if (-not([string]::isNullOrEmpty($result.MaxPIOPS))) {
-                    if ([double]$result.MaxPIOPS -ge [double]$targetUncachedDiskIOPS) {
+                    if ([double]$result.MaxPIOPS -ge $targetUncachedDiskIOPS) {
                         $fitScore -= 1
                         $additionalInfoDictionary["SupportsIOPS"] = "false:needs$($result.MaxPIOPS)-max$targetUncachedDiskIOPS"            
                     }
@@ -674,7 +616,7 @@ foreach ($result in $results) {
                 $fitScore -= 1
                 $additionalInfoDictionary["SupportsIOPS"] = "unknown:needs$($result.MaxPIOPS)" 
             }
-            $targetUncachedDiskMiBps = [double]([int]($targetSku.Capabilities | Where-Object { $_.Name -eq 'UncachedDiskBytesPerSecond' }).Value) / 1024 / 1024
+            $targetUncachedDiskMiBps = [int]($targetSku.Capabilities | Where-Object { $_.Name -eq 'UncachedDiskBytesPerSecond' }).Value / 1024 / 1024
             if ($targetUncachedDiskMiBps -gt 0) { 
                 if (-not([string]::isNullOrEmpty($result.MaxPMiBps))) {
                     if ([double]$result.MaxPMiBps -ge $targetUncachedDiskMiBps) {
@@ -691,53 +633,41 @@ foreach ($result in $results) {
                 $additionalInfoDictionary["SupportsMiBps"] = "unknown:needs$($result.MaxPMiBps)"
             }
 
-            $savingCoefficient = [double] $currentSkuvCPUs / $targetSkuvCPUs
-
-            if ($savingCoefficient -gt 1)
-            {
-                $targetSkuSavingsMonthly = [double]$result.Last30DaysCost - ([double]$result.Last30DaysCost / $savingCoefficient)
-            }
-            else
-            {
-                $targetSkuSavingsMonthly = [double]$result.Last30DaysCost / 2
-            }    
+            $savingCoefficient = $currentSkuvCPUs / $targetSkuvCPUs
 
             if ($targetSku -and $null -eq $skuPricesFound[$targetSku.Name])
             {
-                $skuPricesFound[$targetSku.Name] = Find-SkuHourlyPrice -SKUName $targetSku.Name -SKUPriceSheet $pricesheetEntries
+                $skuPricesFound[$targetSku.Name] = Find-SkuHourlyPrice -SKUName $targetSku.Name -SKUPriceSheet $pricesheet
             }
 
-            if ($targetSku -and $skuPricesFound[$targetSku.Name] -gt 0 -and $skuPricesFound[$targetSku.Name] -lt [double]::MaxValue)
+            $targetSkuSavingsMonthly = $result.Last30DaysCost - ($result.Last30DaysCost / $savingCoefficient)
+
+            if ($targetSku -and $skuPricesFound[$targetSku.Name] -lt [double]::MaxValue)
             {
                 $targetSkuPrice = $skuPricesFound[$targetSku.Name]    
 
                 if ($null -eq $skuPricesFound[$currentSku.Name])
                 {
-                    $skuPricesFound[$currentSku.Name] = Find-SkuHourlyPrice -SKUName $currentSku.Name -SKUPriceSheet $pricesheetEntries
+                    $skuPricesFound[$currentSku.Name] = Find-SkuHourlyPrice -SKUName $currentSku.Name -SKUPriceSheet $pricesheet
                 }
 
-                if ($skuPricesFound[$currentSku.Name] -gt 0)
+                if ($skuPricesFound[$currentSku.Name] -lt [double]::MaxValue)
                 {
                     $currentSkuPrice = $skuPricesFound[$currentSku.Name]    
                     $targetSkuSavingsMonthly = ($currentSkuPrice * [double] $result.Last30DaysQuantity) - ($targetSkuPrice * [double] $result.Last30DaysQuantity)    
                 }
                 else
                 {
-                    $targetSkuSavingsMonthly = [double]$result.Last30DaysCost - ($targetSkuPrice * [double] $result.Last30DaysQuantity)    
+                    $targetSkuSavingsMonthly = $result.Last30DaysCost - ($targetSkuPrice * [double] $result.Last30DaysQuantity)    
                 }
             }
 
-            if ($targetSkuSavingsMonthly -eq [double]::PositiveInfinity)
-            {
-                $targetSkuSavingsMonthly = [double] $result.Last30DaysCost / 2
-            }
-    
             $savingsMonthly = $targetSkuSavingsMonthly
 
         }
         else
         {
-            $savingsMonthly = [double]$result.Last30DaysCost
+            $savingsMonthly = $result.Last30DaysCost
         }
 
         $cpuThreshold = $cpuPercentageThreshold
@@ -792,14 +722,7 @@ foreach ($result in $results) {
         }
         else
         {
-            if ($result.RecommendationTypeId_g -eq $rightSizeRecommendationId)
-            {
-                $savingsMonthly = [double] $result.Last30DaysCost 
-            }
-            else
-            {
-                $savingsMonthly = 0.0 # unknown
-            }
+            $savingsMonthly = [double] $result.Last30DaysCost 
         }            
     }
 
@@ -820,21 +743,15 @@ foreach ($result in $results) {
     }
     else
     {
-        $queryWorkspace = ""
-        if (-not([string]::IsNullOrEmpty($result.WorkspaceId)) -and $result.WorkspaceId -ne $workspaceId)
-        {
-            $queryWorkspace = "workspace('$($result.WorkspaceId)')."
-        }
-
         $queryText = @"
         let perfInterval = $($perfDaysBackwards)d;
         let armId = tolower(`'$queryInstanceId`');
         let gInt = $perfTimeGrain;
-        let LinuxMemoryPerf = $($queryWorkspace)Perf 
+        let LinuxMemoryPerf = Perf 
         | where TimeGenerated > ago(perfInterval) 
         | where CounterName == '% Used Memory' and _ResourceId =~ armId
         | project TimeGenerated, MemoryPercentage = CounterValue; 
-        let WindowsMemoryPerf = $($queryWorkspace)Perf 
+        let WindowsMemoryPerf = Perf 
         | where TimeGenerated > ago(perfInterval) 
         | where CounterName == 'Available MBytes' and _ResourceId =~ armId
         | extend MemoryAvailableMBs = CounterValue, InstanceId = tolower(_ResourceId) 
@@ -850,7 +767,7 @@ foreach ($result in $results) {
         | project TimeGenerated, MemoryPercentage
         | union LinuxMemoryPerf
         | summarize P$($memoryPercentile)MemoryPercentage = percentile(MemoryPercentage, $memoryPercentile) by bin(TimeGenerated, gInt);
-        let ProcessorPerf = $($queryWorkspace)Perf 
+        let ProcessorPerf = Perf 
         | where TimeGenerated > ago(perfInterval) 
         | where CounterName == '% Processor Time' and InstanceName == '_Total' and _ResourceId =~ armId
         | summarize P$($cpuPercentile)CPUPercentage = percentile(CounterValue, $cpuPercentile) by bin(TimeGenerated, gInt);
@@ -913,10 +830,4 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json" };
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
-
-Remove-Item -Path $jsonExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."
+Write-Output "DONE"

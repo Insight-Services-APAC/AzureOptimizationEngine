@@ -56,7 +56,7 @@ else
 $assignmentsSubscriptionsLimitVar = Get-AutomationVariable -Name  "AzureOptimization_RecommendationRBACSubscriptionsAssignmentsLimit" -ErrorAction SilentlyContinue
 if ([string]::IsNullOrEmpty($assignmentsSubscriptionsLimitVar) -or $assignmentsSubscriptionsLimitVar -eq 0)
 {
-    $assignmentsSubscriptionsLimit = 4000
+    $assignmentsSubscriptionsLimit = 2000
 }
 else
 {
@@ -169,8 +169,6 @@ if ($workspaceSubscriptionId -ne $storageAccountSinkSubscriptionId)
     Select-AzSubscription -SubscriptionId $workspaceSubscriptionId
 }
 
-$recommendationsErrors = 0
-
 $assignmentsThreshold = $assignmentsSubscriptionsLimit * ($assignmentsPercentageThreshold / 100)
 
 Write-Output "Looking for subscriptions with more than $assignmentsPercentageThreshold% of the $assignmentsSubscriptionsLimit RBAC assignments limit..."
@@ -200,8 +198,6 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
-    Write-Warning -Message $error[0]
-    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -285,14 +281,6 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
-
-Remove-Item -Path $jsonExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."
-
 $assignmentsThreshold = $assignmentsMgmtGroupsLimit * ($assignmentsPercentageThreshold / 100)
 
 Write-Output "Looking for management groups with more than $assignmentsPercentageThreshold% of the $assignmentsMgmtGroupsLimit RBAC assignments limit..."
@@ -316,8 +304,6 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
-    Write-Warning -Message $error[0]
-    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -381,14 +367,6 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
-
-Remove-Item -Path $jsonExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."
-
 $rgThreshold = $rgLimit * ($rgPercentageThreshold / 100)
 
 Write-Output "Looking for subscriptions with more than $rgPercentageThreshold% of the $rgLimit Resource Groups limit..."
@@ -418,8 +396,6 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
-    Write-Warning -Message $error[0]
-    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -503,15 +479,3 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
-
-Remove-Item -Path $jsonExportPath -Force
-
-$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
-Write-Output "[$now] Removed $jsonExportPath from local disk..."
-
-if ($recommendationsErrors -gt 0)
-{
-    throw "Some of the recommendations queries failed. Please, review the job logs for additional information."
-}
