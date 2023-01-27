@@ -118,6 +118,8 @@ if ($workspaceSubscriptionId -ne $storageAccountSinkSubscriptionId)
     Select-AzSubscription -SubscriptionId $workspaceSubscriptionId
 }
 
+$recommendationsErrors = 0
+
 # Execute the expiring creds recommendation query against Log Analytics
 
 $baseQuery = @" 
@@ -125,7 +127,7 @@ $baseQuery = @"
     let AppsAndKeys = materialize ($aadObjectsTableName
     | where TimeGenerated > ago(1d)
     | where ObjectType_s in ('Application','ServicePrincipal')
-    | where PrincipalNames_s !has 'https://identity.azure.net'
+    | where ObjectSubType_s != 'ManagedIdentity'
     | where Keys_s startswith '['
     | extend Keys = parse_json(Keys_s)
     | project-away Keys_s
@@ -135,7 +137,7 @@ $baseQuery = @"
         $aadObjectsTableName
         | where TimeGenerated > ago(1d)
         | where ObjectType_s in ('Application','ServicePrincipal')
-        | where PrincipalNames_s !has 'https://identity.azure.net'
+        | where ObjectSubType_s != 'ManagedIdentity'
         | where isnotempty(Keys_s) and Keys_s !startswith '['
         | extend Keys = parse_json(Keys_s)
         | project-away Keys_s
@@ -169,6 +171,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -237,13 +241,21 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 # Execute the not expiring in less than X years creds recommendation query against Log Analytics
 
 $baseQuery = @" 
     let expiryInterval = $($notExpiringCredsDays)d;
     let AppsAndKeys = materialize ($aadObjectsTableName
     | where TimeGenerated > ago(1d)
-    | where PrincipalNames_s !has 'https://identity.azure.net'
+    | where ObjectSubType_s != 'ManagedIdentity'
     | where Keys_s startswith '['
     | extend Keys = parse_json(Keys_s)
     | project-away Keys_s
@@ -252,7 +264,7 @@ $baseQuery = @"
     | union ( 
         $aadObjectsTableName
         | where TimeGenerated > ago(1d)
-        | where PrincipalNames_s !has 'https://identity.azure.net'
+        | where ObjectSubType_s != 'ManagedIdentity'
         | where isnotempty(Keys_s) and Keys_s !startswith '['
         | extend Keys = parse_json(Keys_s)
         | project-away Keys_s
@@ -275,6 +287,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -342,3 +356,16 @@ $recommendations | ConvertTo-Json | Out-File $jsonExportPath
 $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
+if ($recommendationsErrors -gt 0)
+{
+    throw "Some of the recommendations queries failed. Please, review the job logs for additional information."
+}

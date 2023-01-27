@@ -15,7 +15,7 @@
         {
             "category": "Cost",
             "typeId": "dc3d2baa-26c8-435e-aa9d-edb2bfd6fff6",
-            "impact": "Medium",
+            "impact": "High",
             "description": "Application Gateways without a backend pool incur in unnecessary costs"
         },
         {
@@ -35,6 +35,36 @@
             "typeId": "3125883f-8b9f-4bde-a0ff-6c739858c6e1",
             "impact": "Low",
             "description": "Orphaned Public IP (without owner resource) incur in unnecessary costs"
+        },
+        {
+            "category": "Cost",
+            "typeId": "a4955cc9-533d-46a2-8625-5c4ebd1c30d5",
+            "impact": "High",
+            "description": "VM Scale Set has been underutilized"
+        },
+        {
+            "category": "Cost",
+            "typeId": "4854b5dc-4124-4ade-879e-6a7bb65350ab",
+            "impact": "High",
+            "description": "Premium SSD disk has been underutilized"
+        },
+        {
+            "category": "Cost",
+            "typeId": "08e049ca-18b0-4d22-b174-131a91d0381c",
+            "impact": "Medium",
+            "description": "Storage Account without retention policy in place"
+        },
+        {
+            "category": "Cost",
+            "typeId": "042adaca-ebdf-49b4-bc1b-2800b6e40fea",
+            "impact": "High",
+            "description": "Underused App Service Plans (performance capacity waste)"
+        },
+        {
+            "category": "Cost",
+            "typeId": "ef525225-8b91-47a3-81f3-e674e94564b6",
+            "impact": "High",
+            "description": "App Service Plans without any application incur in unnecessary costs"
         },
         {
             "category": "HighAvailability",
@@ -83,6 +113,24 @@
             "typeId": "b576a069-b1f2-43a6-9134-5ee75376402a",
             "impact": "High",
             "description": "Virtual Machines should use Managed Disks for higher availability and manageability"
+        },
+        {
+            "category": "HighAvailability",
+            "typeId": "1bf03c4a-c402-4e6c-bf20-051b18af30e2",
+            "impact": "High",
+            "description": "Virtual Machine Scale Sets should use Managed Disks for higher availability and manageability"
+        },
+        {
+            "category": "HighAvailability",
+            "typeId": "1a77887c-7375-434e-af19-c2543171e0b8",
+            "impact": "High",
+            "description": "Virtual Machines should be placed in multiple Availability Zones"
+        },
+        {
+            "category": "HighAvailability",
+            "typeId": "47e5457c-b345-4372-b536-8887fa8f0298",
+            "impact": "High",
+            "description": "Virtual Machine Scale Sets should be placed in multiple Availability Zones"
         },
         {
             "category": "Security",
@@ -161,6 +209,24 @@
             "typeId": "4468da8d-1e72-4998-b6d2-3bc38ddd9330",
             "impact": "High",
             "description": "Subscriptions close to the maximum limit of resource groups"
+        },
+        {
+            "category": "Performance",
+            "typeId": "20a40c62-e5c8-4cc3-9fc2-f4ac75013182",
+            "impact": "Medium",
+            "description": "VM Scale Set performance has been constrained by lack of resources"
+        },
+        {
+            "category": "Performance",
+            "typeId": "724ff2f5-8c83-4105-b00d-029c4560d774",
+            "impact": "Medium",
+            "description": "SQL Database performance has been constrained by lack of resources"
+        },
+        {
+            "category": "Performance",
+            "typeId": "351574cb-c105-4538-a778-11dfbe4857bf",
+            "impact": "Medium",
+            "description": "App Service Plan performance has been constrained by lack of resources"
         }
     ]
 }

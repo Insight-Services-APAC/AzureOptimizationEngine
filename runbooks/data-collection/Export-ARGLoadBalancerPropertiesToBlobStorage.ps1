@@ -111,7 +111,8 @@ resources
 	| where type =~ 'Microsoft.Network/loadBalancers'
 	| mvexpand backendPools = properties.backendAddressPools
 	| extend backendIPCount = array_length(backendPools.properties.backendIPConfigurations)
-	| summarize backendIPCount = sum(backendIPCount) by id
+	| extend backendAddressesCount = array_length(backendPools.properties.loadBalancerBackendAddresses)
+	| summarize backendIPCount = sum(backendIPCount), backendAddressesCount = sum(backendAddressesCount) by id
 ) on id
 | project-away id1
 | order by id asc
@@ -166,6 +167,7 @@ foreach ($lb in $LBsTotal)
         OutboundRulesCount = $lb.outboundRulesCount
         FrontendIPsCount = $lb.frontendIPsCount
         BackendIPCount = $lb.backendIPCount
+        BackendAddressesCount = $lb.backendAddressesCount
         InboundNatPoolsCount = $lb.inboundNatPoolsCount
         BackendPoolsCount = $lb.backendPoolsCount
         ProbesCount = $lb.probesCount
@@ -190,3 +192,11 @@ $csvBlobName = $csvExportPath
 $csvProperties = @{"ContentType" = "text/csv"};
 
 Set-AzStorageBlobContent -File $csvExportPath -Container $storageAccountSinkContainer -Properties $csvProperties -Blob $csvBlobName -Context $sa.Context -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $csvBlobName to Blob Storage..."
+
+Remove-Item -Path $csvExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $csvExportPath from local disk..."    

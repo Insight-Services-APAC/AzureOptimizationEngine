@@ -130,18 +130,18 @@ if ($workspaceSubscriptionId -ne $storageAccountSinkSubscriptionId)
 
 $baseQuery = @"
     let interval = 30d;
-    let etime = todatetime(toscalar($consumptionTableName | summarize max(UsageDate_t))); 
+    let etime = todatetime(toscalar($consumptionTableName | where todatetime(Date_s) < now() and todatetime(Date_s) > ago(interval) | summarize max(todatetime(Date_s)))); 
     let stime = etime-interval; 
     $appGWsTableName
     | where TimeGenerated > ago(1d)
-    | where toint(BackendPoolsCount_s) == 0 or toint(BackendIPCount_s) == 0 or isempty(BackendIPCount_s)
+    | where toint(BackendPoolsCount_s) == 0 or ((BackendIPCount_s == 0 or isempty(BackendIPCount_s)) and (BackendAddressesCount_s == 0 or isempty(BackendAddressesCount_s)))
     | distinct InstanceName_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, SkuCapacity_s, Tags_s, Cloud_s 
     | join kind=leftouter (
         $consumptionTableName
-        | where UsageDate_t between (stime..etime)
-        | project InstanceId_s, Cost_s, UsageDate_t
+        | where todatetime(Date_s) between (stime..etime)
+        | project InstanceId_s=tolower(ResourceId), CostInBillingCurrency_s, Date_s
     ) on InstanceId_s
-    | summarize Last30DaysCost=sum(todouble(Cost_s)) by InstanceName_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, SkuCapacity_s, Tags_s, Cloud_s
+    | summarize Last30DaysCost=sum(todouble(CostInBillingCurrency_s)) by InstanceName_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, SkuCapacity_s, Tags_s, Cloud_s
     | join kind=leftouter ( 
         $subscriptionsTableName
         | where TimeGenerated > ago(1d) 
@@ -161,6 +161,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    throw "Execution aborted"
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -179,15 +181,15 @@ foreach ($result in $results)
     $queryText = @"
     $appGWsTableName
     | where InstanceId_s == '$queryInstanceId'
-    | where toint(BackendPoolsCount_s) == 0 or toint(BackendIPCount_s) == 0 or isempty(BackendIPCount_s)
+    | where toint(BackendPoolsCount_s) == 0 or ((toint(BackendIPCount_s) == 0 or isempty(BackendIPCount_s)) and (toint(BackendAddressesCount_s) == 0 or isempty(BackendAddressesCount_s)))
     | distinct InstanceId_s, InstanceName_s, TimeGenerated
     | summarize FirstUnusedDate = min(TimeGenerated) by InstanceId_s, InstanceName_s
     | join kind=inner (
         $consumptionTableName
-        | project InstanceId_s, Cost_s, UsageDate_t
+        | project InstanceId_s=tolower(ResourceId), CostInBillingCurrency_s, Date_s
     ) on InstanceId_s
-    | where UsageDate_t > FirstUnusedDate
-    | summarize CostsSinceUnused = sum(todouble(Cost_s)) by InstanceName_s, FirstUnusedDate
+    | where todatetime(Date_s) > FirstUnusedDate
+    | summarize CostsSinceUnused = sum(todouble(CostInBillingCurrency_s)) by InstanceName_s, FirstUnusedDate
 "@
     $encodedQuery = [System.Uri]::EscapeDataString($queryText)
     $detailsQueryStart = $deploymentDate
@@ -232,7 +234,7 @@ foreach ($result in $results)
         Cloud = $result.Cloud_s
         Category = "Cost"
         ImpactedArea = "Microsoft.Network/applicationGateways"
-        Impact = "Medium"
+        Impact = "High"
         RecommendationType = "Saving"
         RecommendationSubType = "UnusedAppGateways"
         RecommendationSubTypeId = "dc3d2baa-26c8-435e-aa9d-edb2bfd6fff6"
@@ -262,3 +264,11 @@ $recommendations | ConvertTo-Json | Out-File $jsonExportPath
 $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."

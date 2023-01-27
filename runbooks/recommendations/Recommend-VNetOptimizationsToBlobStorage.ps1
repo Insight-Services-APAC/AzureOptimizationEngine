@@ -83,6 +83,9 @@ else
     $subnetMinAge = [int] $subnetMinAgeVar
 }
 
+$consumptionOffsetDays = [int] (Get-AutomationVariable -Name  "AzureOptimization_ConsumptionOffsetDays")
+$consumptionOffsetDaysStart = $consumptionOffsetDays + 1
+
 $SqlTimeout = 120
 $LogAnalyticsIngestControlTable = "LogAnalyticsIngestControl"
 
@@ -146,7 +149,7 @@ $nsgRulesTableName = $lognamePrefix + ($controlRows | Where-Object { $_.Collecte
 $publicIpsTableName = $lognamePrefix + ($controlRows | Where-Object { $_.CollectedType -eq 'ARGPublicIP' }).LogAnalyticsSuffix + "_CL"
 $consumptionTableName = $lognamePrefix + ($controlRows | Where-Object { $_.CollectedType -eq 'AzureConsumption' }).LogAnalyticsSuffix + "_CL"
 
-Write-Output "Will run query against tables $nicsTableName, $subscriptionsTableName and $vNetsTableName"
+Write-Output "Will run query against tables $nicsTableName, $nsgRulesTableName, $publicIpsTableName, $subscriptionsTableName, $consumptionTableName and $vNetsTableName"
 
 $Conn.Close()    
 $Conn.Dispose()            
@@ -162,6 +165,8 @@ if ($workspaceSubscriptionId -ne $storageAccountSinkSubscriptionId)
 {
     Select-AzSubscription -SubscriptionId $workspaceSubscriptionId
 }
+
+$recommendationsErrors = 0
 
 Write-Output "Looking for subnets with free IP space less than $subnetMaxUsedThreshold%, excluding $subnetFreeExclusions..."
 
@@ -191,6 +196,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -279,6 +286,14 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for subnets with used IP space less than $subnetMinUsedThreshold%..."
 
 $baseQuery = @"
@@ -307,6 +322,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -395,12 +412,20 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for subnets without any device..."
 
 $baseQuery = @"
     $vNetsTableName
     | where TimeGenerated > ago(1d)
-    | where toint(SubnetUsedIPs_s) == 0
+    | where toint(SubnetUsedIPs_s) == 0 and toint(SubnetDelegationsCount_s) == 0
     | join kind=leftouter ( 
         $subscriptionsTableName 
         | where TimeGenerated > ago(1d)
@@ -420,6 +445,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -507,6 +534,14 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for orphaned NICs..."
 
 $baseQuery = @"
@@ -532,6 +567,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -616,6 +653,14 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for NSG rules referring empty or removed subnets..."
 
 $baseQuery = @"
@@ -623,13 +668,13 @@ $baseQuery = @"
     let SubnetsToday = materialize( $vNetsTableName
     | where TimeGenerated > ago(1d)
     | extend SubnetId = tolower(strcat(InstanceId_s, '/subnets/', SubnetName_s))
-    | distinct SubnetId, SubnetPrefix_s, SubnetUsedIPs_s );
+    | distinct SubnetId, SubnetPrefix_s, SubnetUsedIPs_s, SubnetDelegationsCount_s );
     let SubnetsBefore = materialize( $vNetsTableName
     | where TimeGenerated < ago(1d)
     | extend SubnetId = tolower(strcat(InstanceId_s, '/subnets/', SubnetName_s))
     | summarize ExistsSince = min(todatetime(StatusDate_s)) by SubnetId, SubnetPrefix_s );
     let SubnetsExistingLongEnoughIds = SubnetsBefore | where ExistsSince < ago(MinimumSubnetAge) | distinct SubnetId;
-    let EmptySubnets = SubnetsToday | where SubnetId in (SubnetsExistingLongEnoughIds) and toint(SubnetUsedIPs_s) == 0;
+    let EmptySubnets = SubnetsToday | where SubnetId in (SubnetsExistingLongEnoughIds) and toint(SubnetUsedIPs_s) == 0 and toint(SubnetDelegationsCount_s) == 0;
     let SubnetsTodayIds = SubnetsToday | distinct SubnetId;
     let SubnetsTodayPrefixes = SubnetsToday | distinct SubnetPrefix_s;
     let RemovedSubnets = SubnetsBefore | where SubnetId !in (SubnetsTodayIds) and SubnetPrefix_s !in (SubnetsTodayPrefixes);
@@ -679,6 +724,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -764,6 +811,14 @@ $recommendations | ConvertTo-Json | Out-File $jsonExportPath
 $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
 
 Write-Output "Looking for NSG rules referring orphan or removed NICs..."
 
@@ -856,6 +911,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -942,6 +999,14 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for NSG rules referring orphan or removed Public IPs..."
 
 $baseQuery = @"
@@ -1017,6 +1082,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -1104,21 +1171,29 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
 Write-Output "Looking for orphaned Public IPs..."
 
 $baseQuery = @"
     let interval = 30d;
-    let etime = todatetime(toscalar($consumptionTableName | summarize max(UsageDate_t))); 
+    let etime = todatetime(toscalar($consumptionTableName | where todatetime(Date_s) < now() and todatetime(Date_s) > ago(30d) | summarize max(todatetime(Date_s)))); 
     let stime = etime-interval;     
     $publicIpsTableName
     | where TimeGenerated > ago(1d) and isempty(AssociatedResourceId_s)
     | distinct Name_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, AllocationMethod_s, Tags_s, Cloud_s
     | join kind=leftouter (
         $consumptionTableName
-        | where UsageDate_t between (stime..etime)
-        | project InstanceId_s, Cost_s, UsageDate_t
+        | where todatetime(Date_s) between (stime..etime)
+        | project InstanceId_s=tolower(ResourceId), CostInBillingCurrency_s, Date_s
     ) on InstanceId_s
-    | summarize Last30DaysCost=sum(todouble(Cost_s)) by Name_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, AllocationMethod_s, Tags_s, Cloud_s    
+    | summarize Last30DaysCost=sum(todouble(CostInBillingCurrency_s)) by Name_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SkuName_s, AllocationMethod_s, Tags_s, Cloud_s    
     | join kind=leftouter ( 
         $subscriptionsTableName
         | where TimeGenerated > ago(1d) 
@@ -1138,6 +1213,8 @@ try
 catch
 {
     Write-Warning -Message "Query failed. Debug the following query in the AOE Log Analytics workspace: $baseQuery"    
+    Write-Warning -Message $error[0]
+    $recommendationsErrors++
 }
 
 Write-Output "Query finished with $($results.Count) results."
@@ -1160,10 +1237,10 @@ foreach ($result in $results)
     | summarize LastAttachedDate = min(TimeGenerated) by InstanceId_s, Name_s, AllocationMethod_s, SkuName_s
     | join kind=inner (
         $consumptionTableName
-        | project InstanceId_s, Cost_s, UsageDate_t
+        | project InstanceId_s=tolower(ResourceId), CostInBillingCurrency_s, Date_s
     ) on InstanceId_s
-    | where UsageDate_t > LastAttachedDate
-    | summarize CostsSinceDetached = sum(todouble(Cost_s)) by Name_s, LastAttachedDate, AllocationMethod_s, SkuName_s
+    | where todatetime(Date_s) > LastAttachedDate
+    | summarize CostsSinceDetached = sum(todouble(CostInBillingCurrency_s)) by Name_s, LastAttachedDate, AllocationMethod_s, SkuName_s
 "@
     $encodedQuery = [System.Uri]::EscapeDataString($queryText)
     $detailsQueryStart = $deploymentDate
@@ -1239,3 +1316,15 @@ $jsonBlobName = $jsonExportPath
 $jsonProperties = @{"ContentType" = "application/json"};
 Set-AzStorageBlobContent -File $jsonExportPath -Container $storageAccountSinkContainer -Properties $jsonProperties -Blob $jsonBlobName -Context $sa.Context -Force
 
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $jsonBlobName to Blob Storage..."
+
+Remove-Item -Path $jsonExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $jsonExportPath from local disk..."
+
+if ($recommendationsErrors -gt 0)
+{
+    throw "Some of the recommendations queries failed. Please, review the job logs for additional information."
+}

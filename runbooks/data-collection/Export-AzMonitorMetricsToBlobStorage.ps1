@@ -15,6 +15,10 @@ Param (
     [ValidateSet("Maximum", "Minimum", "Average", "Total")]
     [string] $AggregationType,
 
+    [Parameter(Mandatory = $false)]
+    [ValidateSet("Default", "Maximum", "Minimum", "Average", "Total")]
+    [string] $AggregationOfType = "Default",
+
     [Parameter(Mandatory = $true)]
     [string] $TimeSpan, # [d.]hh:mm:ss
 
@@ -190,8 +194,13 @@ foreach ($resource in $allResources) {
     if ($foundResource)
     {
         $aggregatedValue = $null
+        $finalAggregationType = $AggregationType
+        if ($AggregationOfType -ne "Default")
+        {
+            $finalAggregationType = $AggregationOfType
+        }
         if ($valuesAggregation.Count -gt 0) {
-            switch ($AggregationType) {
+            switch ($finalAggregationType) {
                 "Maximum" {
                     $aggregatedValue = ($valuesAggregation | Measure-Object -Maximum).Maximum
                 }
@@ -217,6 +226,7 @@ foreach ($resource in $allResources) {
             ResourceId        = $resource.id.ToLower()
             MetricNames       = $MetricNames
             AggregationType   = $AggregationType
+            AggregationOfType = $AggregationOfType
             MetricValue       = $aggregatedValue
             TimeGrain         = $TimeGrain
             TimeSpan          = $TimeSpan
@@ -232,8 +242,21 @@ Write-Output "[$now] Found $($customMetrics.Count) resources to collect metrics 
 $metricMoment = $queryDate.Add($TimeSpanObj).ToUniversalTime().ToString("yyyyMMddHHmmss")
 $ResourceTypeName = $ResourceType.Split('/')[1].ToLower()
 $MetricName = $MetricNames.Replace(',','').Replace(' ','').Replace('/','').ToLower()
-$AggregationTypeName = $AggregationType.ToLower()
+$AggregationOfTypeName = ""
+if ($AggregationOfType -ne "Default")
+{
+    $AggregationOfTypeName = ("-$AggregationOfType").ToLower()
+}
+$AggregationTypeName = "$($AggregationType.ToLower())$AggregationOfTypeName"
 $csvExportPath = "$metricMoment-metrics-$ResourceTypeName-$MetricName-$AggregationTypeName-$subscriptionSuffix.csv"
+
+$ci = [CultureInfo]::new([System.Threading.Thread]::CurrentThread.CurrentCulture.Name)
+if ($ci.NumberFormat.NumberDecimalSeparator -ne '.')
+{
+    Write-Output "Current culture ($($ci.Name)) does not use . as decimal separator"    
+    $ci.NumberFormat.NumberDecimalSeparator = '.'
+    [System.Threading.Thread]::CurrentThread.CurrentCulture = $ci
+}
 
 $customMetrics | Export-Csv -Path $csvExportPath -NoTypeInformation
 
@@ -242,3 +265,12 @@ $csvBlobName = $csvExportPath
 $csvProperties = @{"ContentType" = "text/csv"};
 
 Set-AzStorageBlobContent -File $csvExportPath -Container $storageAccountSinkContainer -Properties $csvProperties -Blob $csvBlobName -Context $sa.Context -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Uploaded $csvBlobName to Blob Storage..."
+
+Remove-Item -Path $csvExportPath -Force
+
+$now = (Get-Date).ToUniversalTime().ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'")
+Write-Output "[$now] Removed $csvExportPath from local disk..."
+
