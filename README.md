@@ -172,7 +172,7 @@ During deployment, you'll be asked several questions. You must plan for the foll
 The simplest, quickest and recommended method for installing AOE is by using the **Azure Cloud Shell** (PowerShell). You just have to follow these steps:
 
 1. Open Azure Cloud Shell (PowerShell)
-2. Run `git clone https://github.com/helderpinto/AzureOptimizationEngine.git azureoptimizationengine`
+2. Run `git clone https://github.com/Insight-Services-APAC/AzureOptimizationEngine.git azureoptimizationengine`
 3. Run `cd azureoptimizationengine`
 4. (optional) Run `Connect-AzureAD` - this is required to grant the Global Reader role to the Automation Run As Account in Azure AD
 5. Run `.\Deploy-AzureOptimizationEngine.ps1`
