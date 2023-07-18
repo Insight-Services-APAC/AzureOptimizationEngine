@@ -59,6 +59,26 @@
             "value": [
               "value::all"
             ]
+          },
+          {
+            "version": "KqlParameterItem/1.0",
+            "name": "Category",
+            "type": 2,
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "jsonData": "[\"Cost\", \"Security\", \"OperationalExcellence\", \"HighAvailability\", \"Performance\"]",
+            "value": [
+              "value::all"
+            ],
+            "id": "be856cc3-5d47-4c41-a368-4ac80def811b"
           }
         ],
         "style": "above",
@@ -142,14 +162,38 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by Category\r\n",
+              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by Category\r\n",
               "size": 4,
               "title": "Count by category",
               "noDataMessage": "No recommendations available. Review the latest Automation Account runbooks status and fix accordingly.",
               "noDataMessageStyle": 4,
               "queryType": 0,
               "resourceType": "microsoft.operationalinsights/workspaces",
-              "visualization": "piechart"
+              "visualization": "piechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "HighAvailability",
+                    "color": "lightBlue"
+                  },
+                  {
+                    "seriesName": "OperationalExcellence",
+                    "color": "magenta"
+                  },
+                  {
+                    "seriesName": "Cost",
+                    "color": "turquoise"
+                  },
+                  {
+                    "seriesName": "Security",
+                    "color": "brown"
+                  },
+                  {
+                    "seriesName": "Performance",
+                    "color": "blueDarkDark"
+                  }
+                ]
+              }
             },
             "customWidth": "50",
             "conditionalVisibility": {
@@ -164,7 +208,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by Impact_s\r\n",
+              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by Impact_s\r\n",
               "size": 4,
               "title": "Count by impact",
               "noDataMessage": "No recommendations available. Review the latest Automation Account runbooks status and fix accordingly.",
@@ -202,7 +246,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by SubscriptionName_s\r\n",
+              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by SubscriptionName_s\r\n",
               "size": 4,
               "title": "Count by subscription",
               "noDataMessage": "No recommendations available. Review the latest Automation Account runbooks status and fix accordingly.",
@@ -224,7 +268,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by ImpactedArea_s",
+              "query": "let beginTime = todatetime('{LastRecommendationDateTime}')-6d;\r\nlet ActiveGlobalSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isempty(InstanceId_g) and isempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g;\r\nlet ActiveSubscriptionSuppressions = AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceId_g)\r\n| extend SubscriptionGuid_g = InstanceId_g\r\n| project RecommendationSubTypeId_g, SubscriptionGuid_g;\r\nlet ActiveInstanceSuppressions = materialize(AzureOptimizationSuppressionsV1_CL \r\n| where TimeGenerated > beginTime and FilterStartDate_t < beginTime and FilterEndDate_t > now()\r\n| where FilterType_s in ('Snooze','Dismiss')\r\n| where isnotempty(InstanceName_s)\r\n| project RecommendationSubTypeId_g, InstanceName_s);\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > beginTime\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| join kind=leftouter ( ActiveGlobalSuppressions ) on RecommendationSubTypeId_g\r\n| where isempty(RecommendationSubTypeId_g1)\r\n| join kind=leftouter ( ActiveSubscriptionSuppressions ) on RecommendationSubTypeId_g and SubscriptionGuid_g\r\n| where isempty(RecommendationSubTypeId_g2)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.InstanceName_s == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g3)\r\n| join kind=leftouter ( ActiveInstanceSuppressions ) on RecommendationSubTypeId_g and $left.ResourceGroup == $right.InstanceName_s\r\n| where isempty(RecommendationSubTypeId_g4)\r\n| summarize count() by ImpactedArea_s",
               "size": 4,
               "title": "Count by impacted area",
               "noDataMessage": "No recommendations available. Review the latest Automation Account runbooks status and fix accordingly.",
@@ -241,6 +285,298 @@
             },
             "showPin": true,
             "name": "impactedAreaSummary"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > ago(730d)\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| extend Weight = iif(Impact_s == 'Low', 1, iif(Impact_s == 'Medium', 5, 15))\r\n| summarize WeightedCount=sum(Weight) by Category, bin(TimeGenerated, 7d)\r\n| join kind=inner ( \r\n    AzureOptimizationResourceContainersV1_CL\r\n    | where TimeGenerated > ago(730d)\r\n    | where ContainerType_s == 'microsoft.resources/subscriptions'\r\n    | where \"'*'\" == \"{Subscriptions}\" or ContainerName_s in ({Subscriptions})\r\n    | summarize ResourceCount=sum(toint(ResourceCount_s)) by bin(TimeGenerated, 1d)\r\n) on TimeGenerated\r\n| extend Score = round((1-todouble(WeightedCount)/todouble(ResourceCount))*100,1)\r\n| project Category, TimeGenerated, Score",
+              "size": 1,
+              "aggregation": 3,
+              "title": "Optimization Score by Category Over Time (weighted by recommendation impact and overall resources count)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "Cost",
+                    "color": "turquoise"
+                  },
+                  {
+                    "seriesName": "OperationalExcellence",
+                    "color": "magenta"
+                  },
+                  {
+                    "seriesName": "HighAvailability",
+                    "color": "lightBlue"
+                  },
+                  {
+                    "seriesName": "Security",
+                    "color": "brown"
+                  },
+                  {
+                    "seriesName": "Performance",
+                    "color": "blueDarkDark"
+                  }
+                ]
+              }
+            },
+            "customWidth": "80",
+            "name": "scoreByCategoryOverTime"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > todatetime('{LastRecommendationDateTime}')-27d\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| make-series RecCounts=count() on TimeGenerated from todatetime('{LastRecommendationDateTime}')-27d to todatetime('{LastRecommendationDateTime}') step 7d by InstanceId_s, RecommendationDescription_s\r\n| where array_length(RecCounts) == 4 and not(set_has_element(RecCounts, 0))\r\n| summarize count() by Text='over past 4 weeks'",
+              "size": 4,
+              "title": "Long standing recommendations #",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "count_",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal"
+                    }
+                  }
+                },
+                "subtitleContent": {
+                  "columnMatch": "Text",
+                  "formatter": 1
+                },
+                "rightContent": {
+                  "columnMatch": "Count",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  }
+                },
+                "showBorder": false
+              },
+              "textSettings": {
+                "style": "bignumber"
+              }
+            },
+            "customWidth": "20",
+            "name": "longStandingRecs",
+            "styleSettings": {
+              "margin": "20px",
+              "padding": "20px"
+            }
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > ago(730d)\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize count() by Category, bin(TimeGenerated, 7d)",
+              "size": 1,
+              "aggregation": 3,
+              "title": "Recommendations # by Category Over Time",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "OperationalExcellence",
+                    "color": "magenta"
+                  },
+                  {
+                    "seriesName": "HighAvailability",
+                    "color": "lightBlue"
+                  },
+                  {
+                    "seriesName": "Cost",
+                    "color": "turquoise"
+                  },
+                  {
+                    "seriesName": "Security",
+                    "color": "brown"
+                  },
+                  {
+                    "seriesName": "Performance",
+                    "color": "blueDarkDark"
+                  }
+                ]
+              }
+            },
+            "customWidth": "80",
+            "name": "recsCategoryOverTime"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let PreviousWeek = AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > todatetime('{LastRecommendationDateTime}')-8d and TimeGenerated < todatetime('{LastRecommendationDateTime}')-1d\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize PreviousWeekCount=count() by InstanceId_s, RecommendationSubTypeId_g;\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > todatetime('{LastRecommendationDateTime}')-1d\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize ThisWeekCount=count() by InstanceId_s, RecommendationSubTypeId_g\r\n| join kind=leftouter (PreviousWeek) on InstanceId_s, RecommendationSubTypeId_g\r\n| where isempty(InstanceId_s1) and isempty(RecommendationSubTypeId_g1)\r\n| summarize sum(ThisWeekCount) by Text='since previous week'",
+              "size": 4,
+              "title": "New recommendations #",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "sum_ThisWeekCount",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal"
+                    }
+                  }
+                },
+                "subtitleContent": {
+                  "columnMatch": "Text",
+                  "formatter": 1
+                },
+                "rightContent": {
+                  "columnMatch": "Count",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  }
+                },
+                "showBorder": false
+              },
+              "textSettings": {
+                "style": "bignumber"
+              }
+            },
+            "customWidth": "20",
+            "name": "newRecs",
+            "styleSettings": {
+              "margin": "20px",
+              "padding": "20px"
+            }
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > ago(730d)\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize count() by Impact_s, bin(TimeGenerated, 7d)",
+              "size": 1,
+              "aggregation": 3,
+              "title": "Recommendations # by Impact Over Time",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "Medium",
+                    "color": "yellow"
+                  },
+                  {
+                    "seriesName": "High",
+                    "color": "redBright"
+                  },
+                  {
+                    "seriesName": "Low",
+                    "color": "blue"
+                  }
+                ]
+              }
+            },
+            "customWidth": "80",
+            "name": "recsImpactOverTime"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let PreviousWeek = AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > todatetime('{LastRecommendationDateTime}')-8d and TimeGenerated < todatetime('{LastRecommendationDateTime}')-1d\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize PreviousWeekCount=count() by InstanceId_s, RecommendationSubTypeId_g;\r\nAzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > todatetime('{LastRecommendationDateTime}')-1d\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize ThisWeekCount=count() by InstanceId_s, RecommendationSubTypeId_g\r\n| join kind=rightouter (PreviousWeek) on InstanceId_s, RecommendationSubTypeId_g\r\n| where isempty(InstanceId_s) and isempty(RecommendationSubTypeId_g)\r\n| summarize sum(PreviousWeekCount) by Text='since previous week'",
+              "size": 4,
+              "title": "Dropped recommendations #",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "tiles",
+              "tileSettings": {
+                "titleContent": {
+                  "columnMatch": "sum_PreviousWeekCount",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal"
+                    }
+                  }
+                },
+                "subtitleContent": {
+                  "columnMatch": "Text",
+                  "formatter": 1
+                },
+                "rightContent": {
+                  "columnMatch": "Count",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "none"
+                  }
+                },
+                "showBorder": false
+              },
+              "textSettings": {
+                "style": "bignumber"
+              }
+            },
+            "customWidth": "20",
+            "name": "droppedRecs",
+            "styleSettings": {
+              "margin": "20px",
+              "padding": "20px"
+            }
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "AzureOptimizationRecommendationsV1_CL\r\n| where TimeGenerated > ago(730d)\r\n| where \"'*'\" == \"{Subscriptions}\" or SubscriptionName_s in ({Subscriptions})\r\n| where Impact_s in ({Impact})\r\n| where Category in ({Category})\r\n| summarize RecCount=count() by bin(TimeGenerated, 7d)\r\n| join kind=inner ( \r\n    AzureOptimizationResourceContainersV1_CL\r\n    | where TimeGenerated > ago(730d)\r\n    | where ContainerType_s == 'microsoft.resources/subscriptions'\r\n    | where \"'*'\" == \"{Subscriptions}\" or ContainerName_s in ({Subscriptions})\r\n    | summarize ResourceCount=sum(toint(ResourceCount_s)) by bin(TimeGenerated, 1d)\r\n) on TimeGenerated\r\n| project TimeGenerated, ResourceCount",
+              "size": 1,
+              "aggregation": 3,
+              "title": "Resources # Over Time",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  {
+                    "seriesName": "Cost",
+                    "color": "turquoise"
+                  },
+                  {
+                    "seriesName": "OperationalExcellence",
+                    "color": "magenta"
+                  },
+                  {
+                    "seriesName": "HighAvailability",
+                    "color": "lightBlue"
+                  },
+                  {
+                    "seriesName": "Security",
+                    "color": "brown"
+                  },
+                  {
+                    "seriesName": "Performance",
+                    "color": "blueDarkDark"
+                  }
+                ]
+              }
+            },
+            "customWidth": "80",
+            "name": "resourcesOverTime"
           }
         ]
       },
@@ -1081,7 +1417,6 @@
                   ]
                 },
                 {
-                  "id": "57abf104-8b39-4d00-934b-1365a8d34266",
                   "version": "KqlParameterItem/1.0",
                   "name": "OperationalExcellenceRecommendations",
                   "label": "Recommendations",
@@ -1101,7 +1436,8 @@
                   "resourceType": "microsoft.operationalinsights/workspaces",
                   "value": [
                     "value::all"
-                  ]
+                  ],
+                  "id": "2f82e306-088a-417f-b896-0fa126974807"
                 }
               ],
               "style": "above",

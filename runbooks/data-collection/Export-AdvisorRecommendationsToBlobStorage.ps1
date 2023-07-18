@@ -25,7 +25,7 @@ if ([string]::IsNullOrEmpty($cloudEnvironment))
 $authenticationOption = Get-AutomationVariable -Name  "AzureOptimization_AuthenticationOption" -ErrorAction SilentlyContinue # RunAsAccount|ManagedIdentity
 if ([string]::IsNullOrEmpty($authenticationOption))
 {
-    $authenticationOption = "RunAsAccount"
+    $authenticationOption = "ManagedIdentity"
 }
 
 # get Advisor exports sink (storage account) details
@@ -79,7 +79,7 @@ if (-not([string]::IsNullOrEmpty($TargetSubscription)))
 }
 else
 {
-    $subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" -and $_.SubscriptionPolicies.QuotaId -notlike "AAD*" } | ForEach-Object { "$($_.Id)"}
+    $subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" } | ForEach-Object { "$($_.Id)"}
 }
 
 $tenantId = (Get-AzContext).Tenant.Id

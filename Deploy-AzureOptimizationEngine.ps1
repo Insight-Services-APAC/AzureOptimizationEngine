@@ -124,9 +124,8 @@ else {
 
 #region Azure subscription choice
 
-Write-Host "Getting Azure subscriptions (filtering out unsupported ones)..." -ForegroundColor Green
-
-$subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" -and $_.SubscriptionPolicies.QuotaId -notlike "Internal*" -and $_.SubscriptionPolicies.QuotaId -notlike "AAD*" }
+Write-Host "Getting Azure subscriptions..." -ForegroundColor Yellow
+$subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" }
 
 if ($subscriptions.Count -gt 1) {
 
@@ -167,7 +166,7 @@ else
     }
     else
     {
-        throw "No valid subscriptions found. Azure AD or Internal subscriptions are currently not supported."
+        throw "No valid subscriptions found. Only EA, MCA, PAYG or MSDN subscriptions are supported currently."
     }
 }
 

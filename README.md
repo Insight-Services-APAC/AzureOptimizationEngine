@@ -352,6 +352,7 @@ If some recommendation is not applicable or you want it to be removed from the r
 Follow these steps to feed the AOE Log Analytics workspace with the data that is required by the Benefits Usage workbook:
 
 1. Create in the AOE's Azure Automation Account a `AzureOptimization_BillingAccountID` variable with your Enterprise Agreement's billing account ID
+1. Create in the AOE's Azure Automation Account a `AzureOptimization_RetailPricesCurrencyCode` variable with your Enterprise Agreement currency code (e.g., EUR, USD, etc.)
 1. Create in the AOE's Storage Account the following containers: `reservationsexports`, `pricesheetexports` and `reservationspriceexports`
 1. Grant the Enterprise Enrollment Reader role to the AOE's managed identity, by following the steps described [here](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/assign-roles-azure-service-principals#assign-enrollment-account-role-permission-to-the-spn) and using the following values in the REST request query string and JSON body:
     1. *billingAccountName*: your Enterprise Agreement's billing account ID
@@ -374,7 +375,7 @@ Follow these steps to feed the AOE Log Analytics workspace with the data that is
 
 * **Is the AOE supported by Microsoft?** No, the Azure Optimization Engine is not supported under any Microsoft standard support program or service. The scripts are provided AS IS without warranty of any kind. The entire risk arising out of the use or performance of the scripts and documentation remains with you.
 
-* **What type of Azure subscriptions/clouds are supported?** AOE has been deployed and tested against Enterprise Agreement and MSDN subscriptions in the Azure commercial cloud (AzureCloud). Although not tested yet, it should also work in MCA and PAYG subscriptions. It was designed to also operate in the US Government cloud. Azure Internal (MS-AZR-0015P), Sponsorship (MS-AZR-0036P and MS-AZR-0143P), CSP (MS-AZR-0145P, MS-AZR-0146P, and MS-AZR-159P) and DreamSpark (MS-AZR-0144P) subscriptions are not supported.
+* **What type of Azure subscriptions/clouds are supported?** AOE has been deployed and tested against Enterprise Agreement and MSDN subscriptions in the Azure commercial cloud (AzureCloud). Although not tested yet, it should also work in MCA and PAYG subscriptions. It was designed to also operate in the US Government cloud. Azure Internal (MS-AZR-0015P), Sponsorship (MS-AZR-0036P and MS-AZR-0143P), CSP (MS-AZR-0145P, MS-AZR-0146P, and MS-AZR-159P) and DreamSpark (MS-AZR-0144P) subscriptions are not supported, due to lack of availability or disparities in their consumption (billing) exports models. However, if you have unsupported subscriptions and still see value in AOE without collecting consumption data, you can deploy it at your own risk by using the `AllowUnsupportedSubscriptions` switch in the deployment script. For example: `.\Deploy-AzureOptimizationEngine.ps1 -AllowUnsupportedSubscriptions`. If your environment was already deployed, you don't need to redeploy it - it is enough to create an Azure Automation Variable named `AzureOptimization_AllowUnsupportedSubscriptions`, of Boolean type, set to `True`.
 
 * **Why is my Power BI report empty?** Most of the Power BI report pages are configured to filter out recommendations older than 7 days. If it shows empty, just try to refresh the report data.
 

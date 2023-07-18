@@ -10,7 +10,7 @@ if ([string]::IsNullOrEmpty($cloudEnvironment))
 $authenticationOption = Get-AutomationVariable -Name "AzureOptimization_AuthenticationOption" -ErrorAction SilentlyContinue # RunAsAccount|ManagedIdentity
 if ([string]::IsNullOrEmpty($authenticationOption))
 {
-    $authenticationOption = "RunAsAccount"
+    $authenticationOption = "ManagedIdentity"
 }
 
 $workspaceId = Get-AutomationVariable -Name  "AzureOptimization_LogAnalyticsWorkspaceId"
@@ -133,7 +133,7 @@ $baseQuery = @"
     let etime = todatetime(toscalar($consumptionTableName | where todatetime(Date_s) < now() and todatetime(Date_s) > ago(interval) | summarize max(todatetime(Date_s)))); 
     let stime = etime-interval;     
     $disksTableName
-    | where TimeGenerated > ago(1d) and isempty(OwnerVMId_s)
+    | where TimeGenerated > ago(1d) and isempty(OwnerVMId_s) and Tags_s !has 'ASR-ReplicaDisk'
     | distinct DiskName_s, InstanceId_s, SubscriptionGuid_g, TenantGuid_g, ResourceGroupName_s, SKU_s, DiskSizeGB_s, Tags_s, Cloud_s 
     | join kind=leftouter (
         $consumptionTableName

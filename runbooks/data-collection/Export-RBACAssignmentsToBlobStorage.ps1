@@ -19,7 +19,7 @@ if ([string]::IsNullOrEmpty($cloudEnvironment))
 $authenticationOption = Get-AutomationVariable -Name  "AzureOptimization_AuthenticationOption" -ErrorAction SilentlyContinue # RunAsAccount|ManagedIdentity
 if ([string]::IsNullOrEmpty($authenticationOption))
 {
-    $authenticationOption = "RunAsAccount"
+    $authenticationOption = "ManagedIdentity"
 }
 
 # get Advisor exports sink (storage account) details
@@ -69,7 +69,7 @@ $tenantId = (Get-AzContext).Tenant.Id
 $datetime = (get-date).ToUniversalTime()
 $timestamp = $datetime.ToString("yyyy-MM-ddTHH:mm:00.000Z")
 
-$subscriptions = Get-AzSubscription -TenantId $tenantId | Where-Object { $_.State -eq "Enabled" -and $_.SubscriptionPolicies.QuotaId -notlike "AAD*" }
+$subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" }
 
 $roleAssignments = @()
 

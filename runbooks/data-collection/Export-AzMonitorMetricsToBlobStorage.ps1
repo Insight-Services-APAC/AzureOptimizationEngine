@@ -45,7 +45,7 @@ if ([string]::IsNullOrEmpty($cloudEnvironment))
 $authenticationOption = Get-AutomationVariable -Name  "AzureOptimization_AuthenticationOption" -ErrorAction SilentlyContinue # RunAsAccount|ManagedIdentity
 if ([string]::IsNullOrEmpty($authenticationOption))
 {
-    $authenticationOption = "RunAsAccount"
+    $authenticationOption = "ManagedIdentity"
 }
 
 # get ARG exports sink (storage account) details
@@ -103,7 +103,7 @@ if (-not([string]::IsNullOrEmpty($TargetSubscription))) {
     $subscriptionSuffix = "-" + $TargetSubscription
 }
 else {
-    $subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" } | ForEach-Object { "$($_.Id)" }
+    $subscriptions = Get-AzSubscription | Where-Object { $_.State -eq "Enabled" } | ForEach-Object { "$($_.Id)"}
     $subscriptionSuffix = $cloudSuffix + "all-" + $tenantId
 }
 
