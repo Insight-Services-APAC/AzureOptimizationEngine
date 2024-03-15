@@ -7,7 +7,7 @@ IF NOT EXISTS (SELECT * FROM sysobjects WHERE id = object_id(N'[dbo].[Recommenda
 			[GeneratedDate] [datetime] NOT NULL,
 			[Cloud] [varchar](20) NOT NULL,
 			[Category] [varchar](50) NOT NULL,
-			[ImpactedArea] [varchar](50) NOT NULL,
+			[ImpactedArea] [varchar](100) NOT NULL,
 			[Impact] [varchar](20) NOT NULL,
 			[RecommendationType] [varchar](50) NOT NULL,
 			[RecommendationSubType] [varchar](50) NOT NULL,
